@@ -118,6 +118,7 @@ mod impl_ops;
 mod impl_ops_add;
 mod impl_ops_sub;
 mod impl_ops_mul;
+mod impl_ops_pow;
 mod impl_ops_div;
 mod impl_ops_rem;
 
@@ -806,6 +807,64 @@ impl BigDecimal {
         result.take_with_sign(self.sign())
     }
 
+    /// Calculates the checked natural logarithm for a Decimal calculated using Taylor’s series. Returns None for negative numbers or zero.
+    ///
+    /// algorithm from <https://docs.rs/rust_decimal/1.36.0/src/rust_decimal/decimal.rs.html>
+    pub fn ln(&self) -> Option<BigDecimal> {
+        if self.sign() != Sign::Plus {
+            return None;
+        }
+        if self.is_one() {
+            return Some(BigDecimal::zero());
+        }
+
+        let one = BigDecimal::one();
+        let one = &one;
+
+        let zero = BigDecimal::zero();
+        let zero = &zero;
+
+        let e = BigDecimal::from_str(math_consts::E).unwrap();
+        let e = &e;
+
+        let e_inverse = one / e;
+        let e_inverse = &e_inverse;
+
+        let mut x = self.clone();
+        let mut count = BigDecimal::zero();
+
+        while (&x) >= one {
+            x *= e_inverse;
+            count += 1u8;
+        }
+        while (&x) <= e_inverse {
+            x *= e;
+            count -= 1u8;
+        }
+        x -= one;
+
+        if x.is_zero() {
+            return Some(count);
+        }
+
+        let prec: BigDecimal = 75u8.into();
+        let prec = &prec;
+
+        let mut result = zero.clone();
+        let mut iteration = zero.clone();
+        let mut y = one.clone();
+        let mut last = one.clone();
+        let x = -x;
+        while (&last) != (&result) && (&iteration) < prec {
+            iteration += 1u8;
+            last = result.clone();
+            y *= &x;
+            result += (&y) / (&iteration);
+        }
+
+        Some(count - result)
+    }
+
     /// Return given number rounded to 'round_digits' precision after the
     /// decimal point, using default rounding mode
     ///
@@ -1439,7 +1498,6 @@ mod bigdecimal_tests {
     use num_bigint;
     use paste::paste;
 
-
     mod from_biguint {
         use super::*;
         use num_bigint::BigUint;
@@ -2013,6 +2071,45 @@ mod bigdecimal_tests {
             assert_eq!(BigDecimal::from(1)/&a, b);
             assert_eq!(i.inverse(), a);
             // assert_eq!(a.scale, b.scale, "scale mismatch ({} != {}", a, b);
+        }
+    }
+
+    #[test]
+    fn test_ln() {
+        let cases = vec![
+            ("2.3", Some("0.8329091229351040067887613771258319108412788262116627659653074765154206363074458179624038870633965160")),
+            ("0.00001", Some("-11.51292546497022842008995727342182103800550744314386488016663950483786304838676240117998602544799149")),
+            ("1234567890", Some("20.93398685916206371721192480264756841731478332964917495121841784605979007693370425789211362527990099")),
+
+            ("0", None),
+            ("1", Some("0")),
+            ("-39485923482572", None),
+            ("-0.000000000000000001", None),
+            ("-29.485", None),
+        ];
+
+        let max_allowed_tolerance = BigDecimal::from_str("0.0000000000000000000000000000001").unwrap();
+        for (val, expected) in cases.into_iter() {
+            let val = BigDecimal::from_str(val).unwrap();
+            let expected = expected.map(|x| { BigDecimal::from_str(x).unwrap() });
+            let ln_val = val.ln();
+
+            if expected.is_none() {
+                assert!(ln_val.is_none());
+                continue;
+            }
+
+            assert!(ln_val.is_some());
+
+            let ln_val = ln_val.unwrap();
+            let expected = expected.unwrap();
+
+            if ln_val.digits() == expected.digits() {
+                assert_eq!(&ln_val, &expected, "{} != {}", &ln_val, &expected);
+            } else {
+                let abs_diff = ((&ln_val) - (&expected)).abs();
+                assert!((&abs_diff) < (&max_allowed_tolerance), "assertion failed: abs({} - {}) == {} < {}", &ln_val, &expected, &abs_diff, &max_allowed_tolerance);
+            }
         }
     }
 
