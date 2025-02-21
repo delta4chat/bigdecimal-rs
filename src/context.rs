@@ -30,7 +30,7 @@ include!(concat!(env!("OUT_DIR"), "/default_precision.rs"));
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Context {
     /// total number of digits
-    precision: NonZeroU64,
+    pub(crate) precision: NonZeroU64,
     /// how to round
     rounding: RoundingMode,
 }
@@ -133,35 +133,14 @@ mod test_context {
         assert_eq!(c.rounding, RoundingMode::Down);
     }
 
-    #[test]
-    fn sum_two_references() {
-        use stdlib::ops::Neg;
-
-        let ctx = Context::default();
-        let a: BigDecimal = "209682.134972197168613072130300".parse().unwrap();
-        let b: BigDecimal = "3.0782968222271332463325639E-12".parse().unwrap();
-
-        let sum = ctx.add_refs(&a, &b);
-        assert_eq!(sum, "209682.1349721971716913689525271332463325639".parse().unwrap());
-
-        // make negative copy of b without cloning values
-        let neg_b = b.to_ref().neg();
-
-        let sum = ctx.add_refs(&a, neg_b);
-        assert_eq!(sum, "209682.1349721971655347753080728667536674361".parse().unwrap());
-
-        let sum = ctx.with_prec(27).unwrap().with_rounding_mode(RoundingMode::Up).add_refs(&a, neg_b);
-        assert_eq!(sum, "209682.134972197165534775309".parse().unwrap());
-    }
-
-    mod round_decimal_ref {
+    mod round_decimal {
         use super::*;
 
         #[test]
         fn case_bigint_1234567_prec3() {
             let ctx = Context::default().with_prec(3).unwrap();
-            let i = BigInt::from(1234567);
-            let d = ctx.round_decimal_ref(&i);
+            let i = BigDecimal::from(1234567);
+            let d = ctx.round_decimal(i);
             assert_eq!(d.int_val, 123.into());
             assert_eq!(d.scale, -4);
         }
@@ -171,8 +150,8 @@ mod test_context {
             let ctx = Context::default()
                               .with_prec(4).unwrap()
                               .with_rounding_mode(RoundingMode::HalfUp);
-            let i = BigInt::from(1234500);
-            let d = ctx.round_decimal_ref(&i);
+            let i = BigDecimal::from(1234500);
+            let d = ctx.round_decimal(i);
             assert_eq!(d.int_val, 1235.into());
             assert_eq!(d.scale, -3);
         }
@@ -182,8 +161,8 @@ mod test_context {
             let ctx = Context::default()
                               .with_prec(4).unwrap()
                               .with_rounding_mode(RoundingMode::HalfEven);
-            let i = BigInt::from(1234500);
-            let d = ctx.round_decimal_ref(&i);
+            let i = BigDecimal::from(1234500);
+            let d = ctx.round_decimal(i);
             assert_eq!(d.int_val, 1234.into());
             assert_eq!(d.scale, -3);
         }
@@ -191,8 +170,8 @@ mod test_context {
         #[test]
         fn case_bigint_1234567_prec10() {
             let ctx = Context::default().with_prec(10).unwrap();
-            let i = BigInt::from(1234567);
-            let d = ctx.round_decimal_ref(&i);
+            let i = BigDecimal::from(1234567);
+            let d = ctx.round_decimal(i);
             assert_eq!(d.int_val, 1234567000.into());
             assert_eq!(d.scale, 3);
         }

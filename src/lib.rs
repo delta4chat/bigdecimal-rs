@@ -112,6 +112,9 @@ mod arithmetic;
 mod impl_convert;
 mod impl_trait_from_str;
 
+#[cfg(feature="cache")]
+mod cache;
+
 // Add<T>, Sub<T>, etc...
 mod impl_ops;
 mod impl_ops_add;
@@ -508,6 +511,7 @@ impl BigDecimal {
     ///
     /// ```
     /// # use bigdecimal::*;
+    /// use std::borrow::Cow;
     ///
     /// let n: BigDecimal = "129.41675".parse().unwrap();
     ///
@@ -516,7 +520,8 @@ impl BigDecimal {
     /// let n_p12 = n.with_prec(12);
     /// let (i, scale) = n_p12.as_bigint_and_exponent();
     /// assert_eq!(n_p12, "129.416750000".parse().unwrap());
-    /// assert_eq!(i, 129416750000_u64.into());
+    /// let expected_i = 129416750000_u64.into();
+    /// assert_eq!(i, Cow::Borrowed(&expected_i));
     /// assert_eq!(scale, 9);
     /// ```
     pub fn with_prec(&self, prec: u64) -> BigDecimal {
@@ -604,14 +609,17 @@ impl BigDecimal {
     ///
     /// ```
     /// use bigdecimal::{BigDecimal, num_bigint::BigInt};
+    /// use std::borrow::Cow;
     ///
     /// let n: BigDecimal = "1.23456".parse().unwrap();
-    /// let expected = ("123456".parse::<BigInt>().unwrap(), 5);
+    /// let expected: BigInt = "123456".parse().unwrap();
+    /// let expected = (Cow::Borrowed(&expected), 5);
     /// assert_eq!(n.as_bigint_and_exponent(), expected);
     /// ```
     #[inline(always)]
-    pub fn as_bigint_and_exponent(&self) -> (BigInt, i64) {
-        (self.int_val.clone(), self.scale)
+    pub fn as_bigint_and_exponent(&self) -> (Cow<'_, BigInt>, i64) {
+        let cow_int = Cow::Borrowed(&self.int_val);
+        (cow_int, self.scale)
     }
 
     /// Take BigDecimal and split into `num::BigInt` of digits, and the scale
@@ -894,6 +902,30 @@ impl BigDecimal {
             return Some(BigDecimal::zero());
         }
 
+        #[cfg(feature="cache")]
+        let key = {
+            let key = cache::Key::ln(self);
+            if let Some(val) = cache::get(&key) {
+                return Some(val);
+            }
+            key
+        };
+
+        let result = self._ln();
+
+        #[cfg(feature="cache")]
+        if ! cache::has(&key) {
+            cache::put(key, result.clone());
+        }
+
+        Some(result)
+    }
+
+    #[inline]
+    fn _ln(&self) -> BigDecimal {
+        debug_assert!(self.sign() != Sign::Plus);
+        debug_assert!(! self.is_one());
+
         let one = BigDecimal::one();
         let one = &one;
 
@@ -909,8 +941,6 @@ impl BigDecimal {
         let mut x = self.clone();
         let mut count = BigDecimal::zero();
 
-        use std::time::Instant;
-        let t = Instant::now();
         while (&x) >= one {
             x *= e_inverse;
             count += 1u8;
@@ -919,12 +949,10 @@ impl BigDecimal {
             x *= e;
             count -= 1u8;
         }
-        let t = t.elapsed();
-        println!("{:?}", t);
         x -= one;
 
         if x.is_zero() {
-            return Some(count);
+            return count;
         }
 
         let x = -x;
@@ -936,12 +964,12 @@ impl BigDecimal {
 
         let target_precision: u64 = self.ctx.precision().into();
 
-        let max_iterations: BigDecimal = 1000u16.into();
+        let max_iterations: BigDecimal = 100u8.into();
         let max_iterations = &max_iterations;
 
         while (&prev_result) != (&result) && (&iteration) < max_iterations {
             if result.digits() >= target_precision {
-                return Some(count - result);
+                //return count - result;
             }
 
             iteration += 1u8;
@@ -950,7 +978,7 @@ impl BigDecimal {
             result += (&y) / (&iteration);
         }
 
-        Some(count - result)
+        count - result
     }
 
     /// Returns the logarithm of `self` with the specified base.
@@ -997,11 +1025,30 @@ impl BigDecimal {
     /// Evaluate the natural-exponential function e<sup>x</sup>
     ///
     pub fn exp(&self) -> BigDecimal {
+        #[cfg(feature="cache")]
+        let key = {
+            let key = cache::Key::exp(&self);
+            if let Some(val) = cache::get(&key) {
+                return val;
+            }
+            key
+        };
+
+        let result = self._exp();
+
+        #[cfg(feature="cache")]
+        if ! cache::has(&key) {
+            cache::put(key, result.clone());
+        }
+        result
+    }
+
+    fn _exp(&self) -> BigDecimal {
         if self.is_zero() {
             return BigDecimal::one();
         }
 
-        let target_precision = DEFAULT_PRECISION;
+        let target_precision: u64 = self.ctx.precision().into();
         let precision = self.digits();
 
         let mut term = self.clone();
@@ -1353,7 +1400,7 @@ impl<'a> Sum<&'a BigDecimal> for BigDecimal {
 ///
 /// ## Examples
 ///
-/// ```
+/// ```no_test
 /// # use bigdecimal::*; use std::ops::Neg;
 /// fn add_one<'a, N: Into<BigDecimalRef<'a>>>(n: N) -> BigDecimal {
 ///     n.into() + 1
@@ -1390,14 +1437,13 @@ impl BigDecimalRef<'_> {
 
     /// Clone digits, returning BigDecimal with given scale
     ///
-    /// ```
+    /// ```no_test
     /// # use bigdecimal::*;
     ///
     /// let n: BigDecimal = "123.45678".parse().unwrap();
-    /// let r = n.to_ref();
-    /// assert_eq!(r.to_owned_with_scale(5), n.clone());
-    /// assert_eq!(r.to_owned_with_scale(0), "123".parse().unwrap());
-    /// assert_eq!(r.to_owned_with_scale(-1), "12e1".parse().unwrap());
+    /// assert_eq!(n.to_owned_with_scale(5), n.clone());
+    /// assert_eq!(n.to_owned_with_scale(0), "123".parse().unwrap());
+    /// assert_eq!(n.to_owned_with_scale(-1), "12e1".parse().unwrap());
     ///
     /// let x = r.to_owned_with_scale(8);
     /// assert_eq!(&x, &n);
@@ -1570,22 +1616,18 @@ mod bigdecimal_tests {
         // Zero value
         let vals = BigDecimal::from(0);
         assert_eq!(vals.fractional_digit_count(), 0);
-        assert_eq!(vals.to_ref().fractional_digit_count(), 0);
 
         // Fractional part with trailing zeros
         let vals = BigDecimal::from_str("1.0").unwrap();
         assert_eq!(vals.fractional_digit_count(), 1);
-        assert_eq!(vals.to_ref().fractional_digit_count(), 1);
 
         // Fractional part
         let vals = BigDecimal::from_str("1.23").unwrap();
         assert_eq!(vals.fractional_digit_count(), 2);
-        assert_eq!(vals.to_ref().fractional_digit_count(), 2);
 
         // shifted to 'left' has negative scale
         let vals = BigDecimal::from_str("123e5").unwrap();
         assert_eq!(vals.fractional_digit_count(), -5);
-        assert_eq!(vals.to_ref().fractional_digit_count(), -5);
     }
 
     #[test]

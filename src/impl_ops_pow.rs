@@ -4,12 +4,8 @@
 use super::*;
 //use crate::stdlib::mem::swap;
 
-/// [Exponentiation by squaring](https://en.wikipedia.org/wiki/Exponentiation_by_squaring) algorithm for power operation (`x ** y`)
-impl<'a> Pow<&'a BigDecimal> for BigDecimal {
-    type Output = BigDecimal;
-
-    #[inline]
-    fn pow(mut self, rhs: &'a BigDecimal) -> BigDecimal {
+impl BigDecimal {
+    fn _pow(mut self, rhs: &BigDecimal) -> BigDecimal {
         if ! rhs.is_integer() {
             if self.sign() != Sign::Plus { // self <= 0
                 unimplemented!("power with fractional exponents for non-positive base are not supported right now");
@@ -62,6 +58,31 @@ impl<'a> Pow<&'a BigDecimal> for BigDecimal {
 
             self
         }
+    }
+}
+
+/// [Exponentiation by squaring](https://en.wikipedia.org/wiki/Exponentiation_by_squaring) algorithm for power operation (`x ** y`)
+impl<'a> Pow<&'a BigDecimal> for BigDecimal {
+    type Output = BigDecimal;
+
+    #[inline]
+    fn pow(mut self, rhs: &'a BigDecimal) -> BigDecimal {
+        #[cfg(feature="cache")]
+        let key = {
+            let key = cache::Key::pow(&self, &rhs);
+            if let Some(val) = cache::get(&key) {
+                return val;
+            }
+            key
+        };
+
+        let result = self._pow(rhs);
+
+        #[cfg(feature="cache")]
+        if ! cache::has(&key) {
+            cache::put(key, result.clone());
+        }
+        result
     }
 }
 

@@ -22,6 +22,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 bench = false
 
 [dependencies]
+ahash = { version = "0.8.11", default-features = false, features = ["std"], optional = true }
 concat-idents = { version = "1.1.5", default-features = false }
 libm = "0.2.6"
 num-bigint = { version = "0.4.6", default-features = false }
@@ -58,6 +59,7 @@ default = ["std"]
 serde-json = ["serde/derive", "serde_json"]
 string-only = []
 std = ["num-bigint/std", "num-integer/std", "num-traits/std", "dep:portable-atomic", "dep:scc2", "dep:once_cell"]
+cache = ["std", "dep:ahash"]
 
 [[bench]]
 name = "arithmetic"

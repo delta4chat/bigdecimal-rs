@@ -2,31 +2,6 @@
 
 use super::*;
 
-impl Div<BigDecimal> for BigDecimal {
-    type Output = BigDecimal;
-    #[inline]
-    fn div(self, other: BigDecimal) -> BigDecimal {
-        if other.is_zero() {
-            panic!("Division by zero");
-        }
-        if self.is_zero() || other.is_one() {
-            return self;
-        }
-
-        let scale = self.scale - other.scale;
-
-        if self.int_val == other.int_val {
-            return BigDecimal {
-                int_val: 1.into(),
-                scale: scale,
-                ctx: self.ctx,
-            };
-        }
-
-        return impl_division(self.int_val, &other.int_val, scale, self.ctx.precision().into());
-    }
-}
-
 impl<'a> Div<&'a BigDecimal> for BigDecimal {
     type Output = BigDecimal;
     #[inline]
@@ -48,7 +23,34 @@ impl<'a> Div<&'a BigDecimal> for BigDecimal {
             };
         }
 
-        return impl_division(self.int_val, &other.int_val, scale, self.ctx.precision().into());
+        if other == &BigDecimal::from(2u8) {
+            return self.half();
+        }
+
+        #[cfg(feature="cache")]
+        let key = {
+            let key = cache::Key::div(&self, &other);
+            if let Some(val) = cache::get(&key) {
+                return val;
+            }
+            key
+        };
+
+        let result = impl_division(self.int_val, &other.int_val, scale, self.ctx.precision().into());
+
+        #[cfg(feature="cache")]
+        if ! cache::has(&key) {
+            cache::put(key, result.clone());
+        }
+        result
+    }
+}
+
+impl Div<BigDecimal> for BigDecimal {
+    type Output = BigDecimal;
+    #[inline]
+    fn div(self, other: BigDecimal) -> BigDecimal {
+        self.div(&other)
     }
 }
 
@@ -67,10 +69,6 @@ impl Div<&BigDecimal> for &BigDecimal {
             return self.clone();
         }
 
-        if other == &BigDecimal::from(2u8) {
-            return self.half();
-        }
-
         let scale = self.scale - other.scale;
 
         let num_int = &self.int_val;
@@ -84,7 +82,7 @@ impl Div<&BigDecimal> for &BigDecimal {
             };
         }
 
-        return impl_division(num_int.clone(), den_int, scale, self.ctx.precision().into());
+        self.clone().div(other)
     }
 }
 
