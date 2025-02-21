@@ -11,7 +11,11 @@ impl<'a> Pow<&'a BigDecimal> for BigDecimal {
     #[inline]
     fn pow(mut self, rhs: &'a BigDecimal) -> BigDecimal {
         if ! rhs.is_integer() {
-            unimplemented!("power with fractional number is not supported right now...");
+            if self.sign() != Sign::Plus { // self <= 0
+                unimplemented!("power with fractional exponents for non-positive base are not supported right now");
+            }
+
+            return self.ln().unwrap().mul(rhs).exp();
         }
 
         if rhs.is_zero() {
@@ -33,7 +37,7 @@ impl<'a> Pow<&'a BigDecimal> for BigDecimal {
             let one = BigDecimal::one();
             let one = &one;
 
-            let two = BigDecimal::new(2u8.into(), 0);
+            let two: BigDecimal = 2u8.into();
             let two = &two;
 
             let mut exp = rhs.clone();

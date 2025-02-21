@@ -18,15 +18,20 @@ autobenches = false
 edition = "2015"
 
 [lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
 bench = false
 
 [dependencies]
+concat-idents = { version = "1.1.5", default-features = false }
 libm = "0.2.6"
 num-bigint = { version = "0.4.6", default-features = false }
 num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
+once_cell = { version = "1.20.3", features = ["portable-atomic", "parking_lot"], optional = true }
+portable-atomic = { optional = true, version = "1.10.0", default-features = false, features = ["fallback", "std"] }
+scc2 = { optional = true, version = "2.4.1" }
 
-math-consts = { path = "../toolset/math-consts" }
+#math-consts = { path = "../toolset/math-consts" }
 
 serde = { version = "1.0.218", optional = true, default-features = false }
 # Allow direct parsing of JSON floats, for full arbitrary precision
@@ -52,7 +57,7 @@ autocfg = "1"
 default = ["std"]
 serde-json = ["serde/derive", "serde_json"]
 string-only = []
-std = ["num-bigint/std", "num-integer/std", "num-traits/std"]
+std = ["num-bigint/std", "num-integer/std", "num-traits/std", "dep:portable-atomic", "dep:scc2", "dep:once_cell"]
 
 [[bench]]
 name = "arithmetic"

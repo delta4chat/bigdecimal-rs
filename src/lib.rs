@@ -57,7 +57,7 @@
 
 pub extern crate num_bigint;
 pub extern crate num_traits;
-extern crate num_integer;
+pub extern crate num_integer;
 
 #[cfg(test)]
 extern crate paste;
@@ -99,7 +99,6 @@ pub use num_traits::{FromPrimitive, Num, One, Pow, Signed, ToPrimitive, Zero};
 
 use stdlib::f64::consts::LOG2_10;
 
-
 // const DEFAULT_PRECISION: u64 = ${RUST_BIGDECIMAL_DEFAULT_PRECISION} or 100;
 include!(concat!(env!("OUT_DIR"), "/default_precision.rs"));
 
@@ -121,6 +120,13 @@ mod impl_ops_mul;
 mod impl_ops_pow;
 mod impl_ops_div;
 mod impl_ops_rem;
+
+// math constants
+pub mod math_consts;
+
+// extern ffi binding
+#[cfg(feature="std")]
+pub mod ffi;
 
 // PartialEq
 mod impl_cmp;
@@ -211,12 +217,14 @@ pub struct BigDecimal {
 }
 
 #[cfg(not(feature = "std"))]
+#[inline(always)]
 // f64::exp2 is only available in std, we have to use an external crate like libm
 fn exp2(x: f64) -> f64 {
     libm::exp2(x)
 }
 
 #[cfg(feature = "std")]
+#[inline(always)]
 fn exp2(x: f64) -> f64 {
     x.exp2()
 }
@@ -572,7 +580,7 @@ impl BigDecimal {
     /// let expected = ("123456".parse::<BigInt>().unwrap(), 5);
     /// assert_eq!(n.as_bigint_and_exponent(), expected);
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn as_bigint_and_exponent(&self) -> (BigInt, i64) {
         (self.int_val.clone(), self.scale)
     }
@@ -581,6 +589,7 @@ impl BigDecimal {
     ///
     /// Scale is number of digits after the decimal point, can be negative.
     ///
+    #[inline(always)]
     pub fn into_bigint_and_scale(self) -> (BigInt, i64) {
         (self.int_val, self.scale)
     }
@@ -590,6 +599,7 @@ impl BigDecimal {
     ///
     /// Scale is number of digits after the decimal point, can be negative.
     ///
+    #[inline(always)]
     pub fn as_bigint_and_scale(&self) -> (Cow<'_, BigInt>, i64) {
         let cow_int = Cow::Borrowed(&self.int_val);
         (cow_int, self.scale)
@@ -607,14 +617,14 @@ impl BigDecimal {
     /// let expected = ("123456".parse::<num_bigint::BigInt>().unwrap(), 5);
     /// assert_eq!(n.into_bigint_and_exponent(), expected);
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn into_bigint_and_exponent(self) -> (BigInt, i64) {
         (self.int_val, self.scale)
     }
 
     /// Number of digits in the non-scaled integer representation
     ///
-    #[inline]
+    #[inline(always)]
     pub fn digits(&self) -> u64 {
         count_decimal_digits(&self.int_val)
     }
@@ -629,7 +639,7 @@ impl BigDecimal {
     /// let n: BigDecimal = "-123.45".parse().unwrap();
     /// assert_eq!(n.abs(), "123.45".parse().unwrap());
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn abs(&self) -> BigDecimal {
         BigDecimal {
             int_val: self.int_val.abs(),
@@ -644,6 +654,7 @@ impl BigDecimal {
     /// let n: BigDecimal = "123.45".parse().unwrap();
     /// assert_eq!(n.double(), "246.90".parse().unwrap());
     /// ```
+    #[inline(always)]
     pub fn double(&self) -> BigDecimal {
         if self.is_zero() {
             self.clone()
@@ -698,6 +709,7 @@ impl BigDecimal {
     /// let n: BigDecimal = "-9.238597585E+84".parse().unwrap();
     /// assert_eq!(n.square(), "8.5351685337567832225E+169".parse().unwrap());
     /// ```
+    #[inline(always)]
     pub fn square(&self) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             self.clone()
@@ -725,6 +737,7 @@ impl BigDecimal {
     /// let n: BigDecimal = "-9.238597585E+84".parse().unwrap();
     /// assert_eq!(n.cube(), "-7.88529874035334084567570176625E+254".parse().unwrap());
     /// ```
+    #[inline(always)]
     pub fn cube(&self) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             self.clone()
@@ -739,7 +752,7 @@ impl BigDecimal {
     /// Take the square root of the number
     ///
     /// Uses default-precision, set from build time environment variable
-    //// `RUST_BIGDECIMAL_DEFAULT_PRECISION` (defaults to 100)
+    /// `RUST_BIGDECIMAL_DEFAULT_PRECISION` (defaults to 100)
     ///
     /// If the value is < 0, None is returned
     ///
@@ -751,13 +764,13 @@ impl BigDecimal {
     /// let n: BigDecimal = "-9.238597585E+84".parse().unwrap();
     /// assert_eq!(n.sqrt(), None);
     /// ```
-    #[inline]
+    #[inline(always)]
     pub fn sqrt(&self) -> Option<BigDecimal> {
         self.sqrt_with_context(&Context::default())
     }
 
     /// Take the square root of the number, using context for precision and rounding
-    ///
+    #[inline(always)]
     pub fn sqrt_with_context(&self, ctx: &Context) -> Option<BigDecimal> {
         if self.is_zero() || self.is_one() {
             return Some(self.clone());
@@ -774,12 +787,13 @@ impl BigDecimal {
 
     /// Take the cube root of the number, using default context
     ///
-    #[inline]
+    #[inline(always)]
     pub fn cbrt(&self) -> BigDecimal {
         self.cbrt_with_context(&Context::default())
     }
 
     /// Take cube root of self, using properties of context
+    #[inline(always)]
     pub fn cbrt_with_context(&self, ctx: &Context) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             return self.clone();
@@ -789,12 +803,13 @@ impl BigDecimal {
     }
 
     /// Compute the reciprical of the number: x<sup>-1</sup>
-    #[inline]
+    #[inline(always)]
     pub fn inverse(&self) -> BigDecimal {
         self.inverse_with_context(&Context::default())
     }
 
     /// Return inverse of self, rounding with ctx
+    #[inline(always)]
     pub fn inverse_with_context(&self, ctx: &Context) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             return self.clone();
@@ -807,14 +822,23 @@ impl BigDecimal {
         result.take_with_sign(self.sign())
     }
 
-    /// Calculates the checked natural logarithm for a Decimal calculated using Taylor’s series. Returns None for negative numbers or zero.
+    /// Computes the natural logarithm (ln) of `self` using a Taylor series expansion.
     ///
-    /// algorithm from <https://docs.rs/rust_decimal/1.36.0/src/rust_decimal/decimal.rs.html>
+    /// This function returns the natural logarithm of a positive Decimal value.
+    ///
+    /// If `self` is less than or equal to zero, it returns `None` since ln(x) is undefined for non-positive numbers.
+    ///
+    /// The algorithm uses a Taylor series (with appropriate scaling) to compute ln(x).
+    ///
+    /// For details, see the implementation in the Rust Decimal library:
+    ///
+    /// <https://docs.rs/rust_decimal/1.36.0/src/rust_decimal/maths.rs.html#391-425>
+    #[inline]
     pub fn ln(&self) -> Option<BigDecimal> {
-        if self.sign() != Sign::Plus {
+        if self.sign() != Sign::Plus { // self <= 0
             return None;
         }
-        if self.is_one() {
+        if self.is_one() { // self == 1
             return Some(BigDecimal::zero());
         }
 
@@ -865,13 +889,31 @@ impl BigDecimal {
         Some(count - result)
     }
 
+    /// Returns the logarithm of `self` with the specified base.
+    ///
+    /// Mathematically, this computes log<sub>base</sub>(self), which is equivalent to ln(self) / ln(base).
+    ///
+    /// Returns `None` if the base is not greater than 0 or if the base equals 1.
+    #[inline(always)]
+    pub fn log(&self, base: &BigDecimal) -> Option<BigDecimal> {
+        if base.sign() != Sign::Plus { // base <= 0
+            return None;
+        }
+
+        if base.is_one() { // base == 1
+            return None;
+        }
+
+        let result = (self.ln()?) / (base.ln()?);
+        Some(result)
+    }
+
     /// Return given number rounded to 'round_digits' precision after the
     /// decimal point, using default rounding mode
     ///
     /// Default rounding mode is `HalfEven`, but can be configured at compile-time
     /// by the environment variable: `RUST_BIGDECIMAL_DEFAULT_ROUNDING_MODE`
     /// (or by patching _build.rs_ )
-    ///
     pub fn round(&self, round_digits: i64) -> BigDecimal {
         self.with_scale_round(round_digits, Context::default().rounding_mode())
     }
@@ -879,7 +921,6 @@ impl BigDecimal {
     /// Return true if this number has zero fractional part (is equal
     /// to an integer)
     ///
-    #[inline]
     pub fn is_integer(&self) -> bool {
         if self.scale <= 0 {
             true
@@ -890,7 +931,6 @@ impl BigDecimal {
 
     /// Evaluate the natural-exponential function e<sup>x</sup>
     ///
-    #[inline]
     pub fn exp(&self) -> BigDecimal {
         if self.is_zero() {
             return BigDecimal::one();
