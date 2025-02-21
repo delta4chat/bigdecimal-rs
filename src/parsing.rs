@@ -1,5 +1,7 @@
 //! Routines for parsing values into BigDecimals
 
+use super::*;
+
 use super::{BigDecimal, ParseBigDecimalError};
 use stdlib::num::FpCategory;
 
@@ -93,6 +95,7 @@ pub(crate) fn parse_from_f32(n: f32) -> BigDecimal {
     BigDecimal {
         int_val: BigInt::from_biguint(sign, result),
         scale: scale,
+        ctx: Context::default(),
     }
 }
 
@@ -249,6 +252,7 @@ pub(crate) fn parse_from_f64(n: f64) -> BigDecimal {
     BigDecimal {
         int_val: BigInt::from_biguint(sign, result),
         scale: scale,
+        ctx: Context::default(),
     }
 }
 

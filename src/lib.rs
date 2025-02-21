@@ -212,8 +212,12 @@ fn get_rounding_term(num: &BigInt) -> u8 {
 #[derive(Clone, Eq)]
 pub struct BigDecimal {
     int_val: BigInt,
+
     // A positive scale means a negative power of 10
     scale: i64,
+
+    // context that controls rounding and precision
+    ctx: Context,
 }
 
 #[cfg(not(feature = "std"))]
@@ -245,6 +249,7 @@ impl BigDecimal {
         BigDecimal {
             int_val: digits,
             scale: scale,
+            ctx: Context::default(),
         }
     }
 
@@ -255,7 +260,7 @@ impl BigDecimal {
     }
 
     /// Make a BigDecimalRef of this value
-    pub fn to_ref(&self) -> BigDecimalRef<'_> {
+    pub(crate) fn to_ref(&self) -> BigDecimalRef<'_> {
         // search for "From<&'a BigDecimal> for BigDecimalRef<'a>"
         self.into()
     }
@@ -303,6 +308,27 @@ impl BigDecimal {
         stdlib::str::from_utf8(buf)
                     .ok()
                     .and_then(|s| BigDecimal::from_str_radix(s, radix).ok())
+    }
+
+    /// Get current context of this BigDecimal instance.
+    #[inline]
+    pub fn context(&self) -> &Context {
+        &self.ctx
+    }
+
+    /// Set context for this instance of BigDecimal.
+    ///
+    /// this will applys to any operation that needs rounding or precision-limiting.
+    #[inline]
+    pub fn set_context(&mut self, ctx: &Context) {
+        self.ctx = *ctx;
+    }
+
+    #[inline]
+    pub fn with_context(&self, ctx: &Context) -> BigDecimal {
+        let mut out = self.clone();
+        out.set_context(ctx);
+        out
     }
 
     /// Return a new BigDecimal object equivalent to self, with internal
@@ -467,13 +493,14 @@ impl BigDecimal {
     /// The Sign value `NoSign` is ignored: only use Plus & Minus
     ///
     pub(crate) fn take_with_sign(self, sign: Sign) -> BigDecimal {
-        let BigDecimal { scale, mut int_val } = self;
+        let BigDecimal { scale, mut int_val, ctx } = self;
         if int_val.sign() != sign && sign != Sign::NoSign {
             int_val = int_val.neg();
         }
         BigDecimal {
-            int_val: int_val,
-            scale: scale,
+            int_val,
+            scale,
+            ctx,
         }
     }
 
@@ -509,6 +536,7 @@ impl BigDecimal {
                 BigDecimal {
                     int_val: q,
                     scale: self.scale - diff as i64,
+                    ctx: self.ctx,
                 }
             }
             Ordering::Less => {
@@ -516,6 +544,7 @@ impl BigDecimal {
                 BigDecimal {
                     int_val: &self.int_val * ten_to_the(diff),
                     scale: self.scale + diff as i64,
+                    ctx: self.ctx,
                 }
             }
             Ordering::Equal => self.clone(),
@@ -644,6 +673,7 @@ impl BigDecimal {
         BigDecimal {
             int_val: self.int_val.abs(),
             scale: self.scale,
+            ctx: self.ctx,
         }
     }
 
@@ -662,6 +692,7 @@ impl BigDecimal {
             BigDecimal {
                 int_val: self.int_val.clone() * 2,
                 scale: self.scale,
+                ctx: self.ctx,
             }
         }
     }
@@ -684,11 +715,13 @@ impl BigDecimal {
             BigDecimal {
                 int_val: self.int_val.clone().div(2u8),
                 scale: self.scale,
+                ctx: self.ctx,
             }
         } else {
             BigDecimal {
                 int_val: self.int_val.clone().mul(5u8),
                 scale: self.scale + 1,
+                ctx: self.ctx
             }
         }
     }
@@ -717,6 +750,7 @@ impl BigDecimal {
             BigDecimal {
                 int_val: self.int_val.clone() * &self.int_val,
                 scale: self.scale * 2,
+                ctx: self.ctx,
             }
         }
     }
@@ -745,11 +779,23 @@ impl BigDecimal {
             BigDecimal {
                 int_val: self.int_val.clone() * &self.int_val * &self.int_val,
                 scale: self.scale * 3,
+                ctx: self.ctx,
             }
         }
     }
 
-    /// Take the square root of the number
+    /// Take the square root of the number, using context for precision and rounding
+    #[inline(always)]
+    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    pub fn sqrt_with_context(&self, ctx: &Context) -> Option<BigDecimal> {
+        if (&self.ctx) == ctx {
+            self.sqrt()
+        } else {
+            self.with_context(ctx).sqrt()
+        }
+    }
+
+    /// Take the square root of the number, using self.ctx for precision and rounding
     ///
     /// Uses default-precision, set from build time environment variable
     /// `RUST_BIGDECIMAL_DEFAULT_PRECISION` (defaults to 100)
@@ -766,12 +812,6 @@ impl BigDecimal {
     /// ```
     #[inline(always)]
     pub fn sqrt(&self) -> Option<BigDecimal> {
-        self.sqrt_with_context(&Context::default())
-    }
-
-    /// Take the square root of the number, using context for precision and rounding
-    #[inline(always)]
-    pub fn sqrt_with_context(&self, ctx: &Context) -> Option<BigDecimal> {
         if self.is_zero() || self.is_one() {
             return Some(self.clone());
         }
@@ -780,49 +820,61 @@ impl BigDecimal {
         }
 
         let uint = self.int_val.magnitude();
-        let result = arithmetic::sqrt::impl_sqrt(uint, self.scale, ctx);
+        let result = arithmetic::sqrt::impl_sqrt(uint, self.scale, &self.ctx);
 
         Some(result)
     }
 
-    /// Take the cube root of the number, using default context
-    ///
+    /// Take cube root of self, using properties of self.ctx
     #[inline(always)]
     pub fn cbrt(&self) -> BigDecimal {
-        self.cbrt_with_context(&Context::default())
-    }
-
-    /// Take cube root of self, using properties of context
-    #[inline(always)]
-    pub fn cbrt_with_context(&self, ctx: &Context) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             return self.clone();
         }
 
-        arithmetic::cbrt::impl_cbrt_int_scale(&self.int_val, self.scale, ctx)
+        arithmetic::cbrt::impl_cbrt_int_scale(&self.int_val, self.scale, &self.ctx)
+    }
+
+    /// Take cube root of self, using properties of provided context
+    #[inline(always)]
+    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    pub fn cbrt_with_context(&self, ctx: &Context) -> BigDecimal {
+        if (&self.ctx) == ctx {
+            self.cbrt()
+        } else {
+            self.with_context(ctx).cbrt()
+        }
     }
 
     /// Compute the reciprical of the number: x<sup>-1</sup>
     #[inline(always)]
-    pub fn inverse(&self) -> BigDecimal {
-        self.inverse_with_context(&Context::default())
+    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    pub fn inverse_with_context(&self, ctx: &Context) -> BigDecimal {
+        if (&self.ctx) == ctx {
+            self.inverse()
+        } else {
+            self.with_context(ctx).inverse()
+        }
     }
 
-    /// Return inverse of self, rounding with ctx
+    /// Return inverse of self, rounding with self.ctx
+    ///
+    /// Compute the reciprical of the number: x<sup>-1</sup>
     #[inline(always)]
-    pub fn inverse_with_context(&self, ctx: &Context) -> BigDecimal {
+    pub fn inverse(&self) -> BigDecimal {
         if self.is_zero() || self.is_one() {
             return self.clone();
         }
 
         let uint = self.int_val.magnitude();
-        let result = arithmetic::inverse::impl_inverse_uint_scale(uint, self.scale, ctx);
+        let result = arithmetic::inverse::impl_inverse_uint_scale(uint, self.scale, &self.ctx);
 
         // always copy sign
         result.take_with_sign(self.sign())
     }
 
     /// Computes the natural logarithm (ln) of `self` using a Taylor series expansion.
+    /// (rounding and precision-limits by self.ctx)
     ///
     /// This function returns the natural logarithm of a positive Decimal value.
     ///
@@ -857,6 +909,8 @@ impl BigDecimal {
         let mut x = self.clone();
         let mut count = BigDecimal::zero();
 
+        use std::time::Instant;
+        let t = Instant::now();
         while (&x) >= one {
             x *= e_inverse;
             count += 1u8;
@@ -865,23 +919,33 @@ impl BigDecimal {
             x *= e;
             count -= 1u8;
         }
+        let t = t.elapsed();
+        println!("{:?}", t);
         x -= one;
 
         if x.is_zero() {
             return Some(count);
         }
 
-        let prec: BigDecimal = 75u8.into();
-        let prec = &prec;
+        let x = -x;
 
         let mut result = zero.clone();
         let mut iteration = zero.clone();
         let mut y = one.clone();
-        let mut last = one.clone();
-        let x = -x;
-        while (&last) != (&result) && (&iteration) < prec {
+        let mut prev_result = one.clone();
+
+        let target_precision: u64 = self.ctx.precision().into();
+
+        let max_iterations: BigDecimal = 1000u16.into();
+        let max_iterations = &max_iterations;
+
+        while (&prev_result) != (&result) && (&iteration) < max_iterations {
+            if result.digits() >= target_precision {
+                return Some(count - result);
+            }
+
             iteration += 1u8;
-            last = result.clone();
+            prev_result = result.clone();
             y *= &x;
             result += (&y) / (&iteration);
         }
@@ -890,6 +954,7 @@ impl BigDecimal {
     }
 
     /// Returns the logarithm of `self` with the specified base.
+    /// (rounding and precision-limits by provided context)
     ///
     /// Mathematically, this computes log<sub>base</sub>(self), which is equivalent to ln(self) / ln(base).
     ///
@@ -937,7 +1002,6 @@ impl BigDecimal {
         }
 
         let target_precision = DEFAULT_PRECISION;
-
         let precision = self.digits();
 
         let mut term = self.clone();
@@ -945,13 +1009,14 @@ impl BigDecimal {
         let mut prev_result = result.clone();
         let mut factorial = BigInt::one();
 
+        let mut trimmed_result;
         for n in 2.. {
             term *= self;
             factorial *= n;
             // ∑ term=x^n/n!
             result += impl_division(term.int_val.clone(), &factorial, term.scale, 117 + precision);
 
-            let trimmed_result = result.with_prec(target_precision + 5);
+            trimmed_result = result.with_prec(target_precision + 5);
             if prev_result == trimmed_result {
                 return trimmed_result.with_prec(target_precision);
             }
@@ -971,7 +1036,11 @@ impl BigDecimal {
         digits.truncate(trunc_to);
         let int_val = BigInt::from_radix_be(sign, &digits, 10).unwrap();
         let scale = self.scale - trailing_count as i64;
-        BigDecimal::new(int_val, scale)
+        BigDecimal {
+            int_val,
+            scale,
+            ctx: self.ctx
+        }
     }
 
     //////////////////////////
@@ -1178,6 +1247,7 @@ fn impl_division(mut num: BigInt, den: &BigInt, mut scale: i64, max_precision: u
         return BigDecimal {
             int_val: quotient,
             scale: scale,
+            ctx: Context::default(),
         };
     }
 
@@ -1301,18 +1371,20 @@ impl<'a> Sum<&'a BigDecimal> for BigDecimal {
 /// ```
 ///
 #[derive(Clone, Copy, Debug, Eq)]
-pub struct BigDecimalRef<'a> {
+pub(crate) struct BigDecimalRef<'a> {
     sign: Sign,
     digits: &'a BigUint,
     scale: i64,
 }
 
 impl BigDecimalRef<'_> {
+    
     /// Clone digits to make this reference a full BigDecimal object
-    pub fn to_owned(&self) -> BigDecimal {
+    pub(crate) fn to_owned(&self) -> BigDecimal {
         BigDecimal {
             scale: self.scale,
             int_val: BigInt::from_biguint(self.sign, self.digits.clone()),
+            ctx: Context::default(),
         }
     }
 
@@ -1331,7 +1403,7 @@ impl BigDecimalRef<'_> {
     /// assert_eq!(&x, &n);
     /// assert_eq!(x.fractional_digit_count(), 8);
     /// ```
-    pub fn to_owned_with_scale(&self, scale: i64) -> BigDecimal {
+    pub(crate) fn to_owned_with_scale(&self, scale: i64) -> BigDecimal {
         use stdlib::cmp::Ordering::*;
 
         let digits = match arithmetic::diff(self.scale, scale) {
@@ -1355,6 +1427,7 @@ impl BigDecimalRef<'_> {
         BigDecimal {
             scale: scale,
             int_val: BigInt::from_biguint(self.sign, digits),
+            ctx: Context::default(),
         }
     }
 
@@ -1367,17 +1440,6 @@ impl BigDecimalRef<'_> {
     /// Sign of decimal
     pub fn sign(&self) -> Sign {
         self.sign
-    }
-
-    /// Return number of digits 'right' of the decimal point
-    /// (including leading zeros)
-    pub fn fractional_digit_count(&self) -> i64 {
-        self.scale
-    }
-
-    /// Count total number of decimal digits
-    pub fn count_digits(&self) -> u64 {
-        count_decimal_digits_uint(self.digits)
     }
 
     /// Return the number of trailing zeros in the referenced integer
@@ -1393,70 +1455,9 @@ impl BigDecimalRef<'_> {
         2 * loc + usize::from(digit_pairs[loc] % 10 == 0)
     }
 
-    /// Split into components
-    pub(crate) fn as_parts(&self) -> (Sign, i64, &BigUint) {
-        (self.sign, self.scale, self.digits)
-    }
-
-    /// Take absolute value of the decimal (non-negative sign)
-    pub fn abs(&self) -> Self {
-        Self {
-            sign: self.sign * self.sign,
-            digits: self.digits,
-            scale: self.scale,
-        }
-    }
-
-    /// Create BigDecimal from this reference, rounding to precision and
-    /// with rounding-mode of the given context
-    ///
-    ///
-    pub fn round_with_context(&self, ctx: &Context) -> BigDecimal {
-        ctx.round_decimal_ref(*self)
-    }
-
-    /// Take square root of this number
-    pub fn sqrt_with_context(&self, ctx: &Context) -> Option<BigDecimal> {
-        use Sign::*;
-
-        let (sign, scale, uint) = self.as_parts();
-
-        match sign {
-            Minus => None,
-            NoSign => Some(Zero::zero()),
-            Plus => Some(arithmetic::sqrt::impl_sqrt(uint, scale, ctx)),
-        }
-    }
-
-    /// Take square root of absolute-value of the number
-    pub fn sqrt_abs_with_context(&self, ctx: &Context) -> BigDecimal {
-        use Sign::*;
-
-        let (_, scale, uint) = self.as_parts();
-        arithmetic::sqrt::impl_sqrt(uint, scale, ctx)
-    }
-
-    /// Take square root, copying sign of the initial decimal
-    pub fn sqrt_copysign_with_context(&self, ctx: &Context) -> BigDecimal {
-        use Sign::*;
-
-        let (sign, scale, uint) = self.as_parts();
-        let mut result = arithmetic::sqrt::impl_sqrt(uint, scale, ctx);
-        if sign == Minus {
-            result.int_val = result.int_val.neg();
-        }
-        result
-    }
-
     /// Return if the referenced decimal is zero
     pub fn is_zero(&self) -> bool {
         self.digits.is_zero()
-    }
-
-    /// Clone this value into dest
-    pub fn clone_into(&self, dest: &mut BigDecimal) {
-        dest.int_val = num_bigint::BigInt::from_biguint(self.sign, self.digits.clone());
-        dest.scale = self.scale;
     }
 }
 
@@ -1484,7 +1485,7 @@ impl<'a> From<&'a BigInt> for BigDecimalRef<'a> {
 
 
 /// pair i64 'scale' with some other value
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 struct WithScale<T> {
     pub value: T,
     pub scale: i64,

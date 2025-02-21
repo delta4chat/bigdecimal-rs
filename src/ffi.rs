@@ -97,7 +97,7 @@ impl ID {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Errno {
     /// No Error but no value avaliable.
-    /// (currently used by sqrt function)
+    /// (currently used by sqrt/ln/log function)
     NO_ERROR = 0i8,
 
     /// extern FFI caller provides NULL pointer.
@@ -662,7 +662,7 @@ pub extern fn bigint_from_bytes_le(sign: i8, bytes_ptr: *const u8, bytes_len: us
 fn bigdecimal_from_bytes(big_endian: bool, sign: i8, bytes_ptr: *const u8, bytes_len: usize, scale: i64) -> i64 {
     let bigint = bigint_from_bytes(big_endian, sign, bytes_ptr, bytes_len, false).1.unwrap();
 
-    let bigdec = BigDecimal::from_bigint(bigint, scale);
+    let bigdec = BigDecimal::from_bigint(bigint, scale).normalized();
     let bigdec = Arc::new(bigdec);
 
     let g = scc2::ebr::Guard::new();
@@ -803,10 +803,10 @@ macro_rules! bigdecimal_ffi_fn_ops_1 {
 bigdecimal_ffi_fn_ops_1!(bigdecimal_abs, abs);
 bigdecimal_ffi_fn_ops_1!(bigdecimal_sqrt, sqrt);
 bigdecimal_ffi_fn_ops_1!(bigdecimal_cbrt, cbrt);
+bigdecimal_ffi_fn_ops_1!(bigdecimal_ln, ln);
 bigdecimal_ffi_fn_ops_1!(bigdecimal_exp, exp);
 bigdecimal_ffi_fn_ops_1!(bigdecimal_half, half);
 bigdecimal_ffi_fn_ops_1!(bigdecimal_cube, cube);
-
 
 macro_rules! bigint_ffi_fn_ops_1 {
     ($fn_name:ident, $op_method:ident) => {
@@ -816,7 +816,6 @@ macro_rules! bigint_ffi_fn_ops_1 {
 bigint_ffi_fn_ops_1!(bigint_abs, abs);
 bigint_ffi_fn_ops_1!(bigint_sqrt, sqrt);
 bigint_ffi_fn_ops_1!(bigint_cbrt, cbrt);
-//bigint_ffi_fn_ops_1!(bigint_exp, exp);
 
 macro_rules! bignum_ffi_fn_ops_2 {
     ($num_name:ident, $num_index:ident, $fn_name:ident, $op_trait:ty, $op_method:ident) => {
@@ -834,11 +833,13 @@ macro_rules! bignum_ffi_fn_ops_2 {
                 if let Some(y) = (&*$num_index).0.peek(&y_id, &g) {
 
                     const OP_METHOD: &'static str = stringify!($op_method);
-                    if OP_METHOD == "div" || OP_METHOD == "rem" {
-                        use num_traits::Zero;
-                        if y.is_zero() {
-                            return Errno::DIVISION_BY_ZERO.to_i64();
-                        }
+                    match OP_METHOD {
+                        "div" | "rem" => {
+                            if y.is_zero() {
+                                return Errno::DIVISION_BY_ZERO.to_i64();
+                            }
+                        },
+                        _ => {}
                     }
 
                     use $op_trait;

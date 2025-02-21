@@ -19,12 +19,11 @@ impl Div<BigDecimal> for BigDecimal {
             return BigDecimal {
                 int_val: 1.into(),
                 scale: scale,
+                ctx: self.ctx,
             };
         }
 
-        let max_precision = DEFAULT_PRECISION;
-
-        return impl_division(self.int_val, &other.int_val, scale, max_precision);
+        return impl_division(self.int_val, &other.int_val, scale, self.ctx.precision().into());
     }
 }
 
@@ -45,12 +44,11 @@ impl<'a> Div<&'a BigDecimal> for BigDecimal {
             return BigDecimal {
                 int_val: 1.into(),
                 scale: scale,
+                ctx: self.ctx,
             };
         }
 
-        let max_precision = DEFAULT_PRECISION;
-
-        return impl_division(self.int_val, &other.int_val, scale, max_precision);
+        return impl_division(self.int_val, &other.int_val, scale, self.ctx.precision().into());
     }
 }
 
@@ -78,12 +76,11 @@ impl Div<&BigDecimal> for &BigDecimal {
             return BigDecimal {
                 int_val: 1.into(),
                 scale: scale,
+                ctx: self.ctx,
             };
         }
 
-        let max_precision = DEFAULT_PRECISION;
-
-        return impl_division(num_int.clone(), den_int, scale, max_precision);
+        return impl_division(num_int.clone(), den_int, scale, self.ctx.precision().into());
     }
 }
 

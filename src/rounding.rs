@@ -12,96 +12,127 @@ include!(concat!(env!("OUT_DIR"), "/default_rounding_mode.rs"));
 ///
 /// Default rounding mode is HalfUp
 ///
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+/// Specifies different rounding modes for numerical values.
+///
+/// Each variant defines how numbers with fractional parts are rounded to the nearest integer.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum RoundingMode {
-    /// Always round away from zero
+    /// **Round away from zero (Directed rounding)**
     ///
+    /// Always rounds *away* from zero, meaning positive numbers round up and negative numbers round down.
     ///
-    /// * 5.5 → 6.0
-    /// * 2.5 → 3.0
-    /// * 1.6 → 2.0
-    /// * 1.1 → 2.0
-    /// * -1.1 → -2.0
-    /// * -1.6 → -2.0
-    /// * -2.5 → -3.0
-    /// * -5.5 → -6.0
+    /// | Input  | Output |
+    /// |--------|--------|
+    /// |  5.5   |  6.0   |
+    /// |  2.5   |  3.0   |
+    /// |  1.6   |  2.0   |
+    /// |  1.1   |  2.0   |
+    /// | -1.1   | -2.0   |
+    /// | -1.6   | -2.0   |
+    /// | -2.5   | -3.0   |
+    /// | -5.5   | -6.0   |
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: `math.ceil(x) if x > 0 else math.floor(x)`
+    /// - **JavaScript**: `x > 0 ? Math.ceil(x) : Math.floor(x)`
+    /// - **Rust**: `if x > 0.0 { x.ceil() } else { x.floor() }`
     Up,
 
-    /// Always round towards zero
+    /// **Round towards zero (Truncation)**
     ///
-    /// * 5.5  →  5.0
-    /// * 2.5  →  2.0
-    /// * 1.6  →  1.0
-    /// * 1.1  →  1.0
-    /// * -1.1 → -1.0
-    /// * -1.6 → -1.0
-    /// * -2.5 → -2.0
-    /// * -5.5 → -5.0
+    /// Always rounds *towards* zero by discarding the fractional part.
+    ///
+    /// | Input  | Output |
+    /// |--------|--------|
+    /// |  5.5   |  5.0   |
+    /// |  2.5   |  2.0   |
+    /// |  1.6   |  1.0   |
+    /// |  1.1   |  1.0   |
+    /// | -1.1   | -1.0   |
+    /// | -1.6   | -1.0   |
+    /// | -2.5   | -2.0   |
+    /// | -5.5   | -5.0   |
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: `math.trunc(x)`
+    /// - **JavaScript**: `Math.trunc(x)`
+    /// - **Rust**: `x.trunc()`
+    /// - **C (libm)**: `trunc(x)`
     Down,
 
-    /// Towards +∞
+    /// **Round towards +∞ (Ceiling)**
     ///
-    /// * 5.5 → 6.0
-    /// * 2.5 → 3.0
-    /// * 1.6 → 2.0
-    /// * 1.1 → 2.0
-    /// * -1.1 → -1.0
-    /// * -1.6 → -1.0
-    /// * -2.5 → -2.0
-    /// * -5.5 → -5.0
+    /// Always rounds *up* towards positive infinity.
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: `math.ceil(x)`
+    /// - **JavaScript**: `Math.ceil(x)`
+    /// - **Rust**: `x.ceil()`
+    /// - **C (libm)**: `ceil(x)`
     Ceiling,
 
-    /// Towards -∞
+    /// **Round towards -∞ (Floor)**
     ///
-    /// * 5.5 → 5.0
-    /// * 2.5 → 2.0
-    /// * 1.6 → 1.0
-    /// * 1.1 → 1.0
-    /// * -1.1 → -2.0
-    /// * -1.6 → -2.0
-    /// * -2.5 → -3.0
-    /// * -5.5 → -6.0
+    /// Always rounds *down* towards negative infinity.
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: `math.floor(x)`
+    /// - **JavaScript**: `Math.floor(x)`
+    /// - **Rust**: `x.floor()`
+    /// - **C (libm)**: `floor(x)`
     Floor,
 
-    /// Round to 'nearest neighbor', or up if ending decimal is 5
+    /// **Round to the nearest integer, rounding up on 0.5 (Half-up rounding)**
     ///
-    /// * 5.5 → 6.0
-    /// * 2.5 → 3.0
-    /// * 1.6 → 2.0
-    /// * 1.1 → 1.0
-    /// * -1.1 → -1.0
-    /// * -1.6 → -2.0
-    /// * -2.5 → -3.0
-    /// * -5.5 → -6.0
+    /// If the fractional part is **≥ 0.5**, round *up*. Otherwise, round *down*.
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: `round(x)`
+    /// - **JavaScript**: `Math.round(x)`
+    /// - **Rust**: `x.round()`
+    /// - **C (libm)**: `round(x)`
     HalfUp,
 
-    /// Round to 'nearest neighbor', or down if ending decimal is 5
+    /// **Round to the nearest integer, rounding down on 0.5 (Half-down rounding)**
     ///
-    /// * 5.5 → 5.0
-    /// * 2.5 → 2.0
-    /// * 1.6 → 2.0
-    /// * 1.1 → 1.0
-    /// * -1.1 → -1.0
-    /// * -1.6 → -2.0
-    /// * -2.5 → -2.0
-    /// * -5.5 → -5.0
+    /// If the fractional part is **> 0.5**, round *up*. If exactly **0.5**, round *down*.
+    ///
+    /// **Equivalent functions:**
+    /// - **Python**: No equivalent, use:
+    ///   ```python
+    ///   def round_half_down(x):
+    ///       return math.floor(x + 0.5) if x > 0 else math.ceil(x - 0.5)
+    ///   ```
+    /// - **JavaScript**: No built-in function, use:
+    ///   ```js
+    ///   function roundHalfDown(x) {
+    ///       return x > 0 ? Math.floor(x + 0.5) : Math.ceil(x - 0.5);
+    ///   }
+    ///   ```
+    /// - **Rust**: No direct equivalent
+    /// - **C (libm)**: No direct equivalent
     HalfDown,
 
-    /// Round to 'nearest neighbor', if equidistant, round towards
-    /// nearest even digit
+    /// **Round to the nearest even integer (Banker’s rounding)**
     ///
-    /// * 5.5 → 6.0
-    /// * 2.5 → 2.0
-    /// * 1.6 → 2.0
-    /// * 1.1 → 1.0
-    /// * -1.1 → -1.0
-    /// * -1.6 → -2.0
-    /// * -2.5 → -2.0
-    /// * -5.5 → -6.0
+    /// If the number is **exactly** halfway between two integers, round towards the nearest even integer.
     ///
+    /// **Equivalent functions:**
+    /// - **Python**: `round(x)`
+    /// - **JavaScript**: No direct equivalent, use:
+    ///   ```js
+    ///   function roundHalfEven(x) {
+    ///       let rounded = Math.round(x);
+    ///       if (Math.abs(x % 1) === 0.5) {
+    ///           return rounded % 2 === 0 ? rounded : rounded - 1;
+    ///       }
+    ///       return rounded;
+    ///   }
+    ///   ```
+    /// - **Rust**: `x.round()`
+    /// - **C (libm)**: `rint(x)`
     HalfEven,
 }
-
 
 impl RoundingMode {
     /// Perform the rounding operation

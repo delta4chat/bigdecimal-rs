@@ -1,18 +1,20 @@
 //! Code for implementing From/To BigDecimals
 
-use crate::BigDecimal;
+use crate::*;
+
 use crate::stdlib::convert::TryFrom;
 
 use num_bigint::BigInt;
 
 
 macro_rules! impl_from_int_primitive {
-    ($t:ty) => {
+    ($($t:ty)*) => {$(
         impl From<$t> for BigDecimal {
             fn from(n: $t) -> Self {
                 BigDecimal {
                     int_val: n.into(),
                     scale: 0,
+                    ctx: Context::default(),
                 }
             }
         }
@@ -22,23 +24,18 @@ macro_rules! impl_from_int_primitive {
                 BigDecimal {
                     int_val: (*n).into(),
                     scale: 0,
+                    ctx: Context::default(),
                 }
             }
         }
-    };
+    )*};
 }
 
-impl_from_int_primitive!(u8);
-impl_from_int_primitive!(u16);
-impl_from_int_primitive!(u32);
-impl_from_int_primitive!(u64);
-impl_from_int_primitive!(u128);
-impl_from_int_primitive!(i8);
-impl_from_int_primitive!(i16);
-impl_from_int_primitive!(i32);
-impl_from_int_primitive!(i64);
-impl_from_int_primitive!(i128);
-
+impl_from_int_primitive! {
+    u8 u16 u32 u64 u128
+    i8 i16 i32 i64 i128
+    isize usize
+}
 
 impl TryFrom<f32> for BigDecimal {
     type Error = super::ParseBigDecimalError;
@@ -64,6 +61,7 @@ impl From<BigInt> for BigDecimal {
         BigDecimal {
             int_val: int_val,
             scale: 0,
+            ctx: Context::default(),
         }
     }
 }
@@ -75,6 +73,7 @@ impl<T: Into<BigInt>> From<(T, i64)> for BigDecimal {
         Self {
             int_val: int_val.into(),
             scale: scale,
+            ctx: Context::default(),
         }
     }
 }

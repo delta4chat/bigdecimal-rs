@@ -27,7 +27,7 @@ include!(concat!(env!("OUT_DIR"), "/default_precision.rs"));
 /// It is recommended that the user set explicit values of a Context and *not*
 /// rely on compile time constants, but the option is there if necessary.
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Context {
     /// total number of digits
     precision: NonZeroU64,
@@ -88,12 +88,6 @@ impl Context {
         n.with_precision_round(self.precision(), self.rounding_mode())
     }
 
-    /// Round decimal to precision in this context, using rounding-mode
-    pub fn round_decimal_ref<'a, D: Into<BigDecimalRef<'a>>>(&self, n: D) -> BigDecimal {
-        let d = n.into().to_owned();
-        d.with_precision_round(self.precision(), self.rounding_mode())
-    }
-
     /// Round digits x and y with the rounding mode
     #[allow(dead_code)]
     pub(crate) fn round_pair(&self, sign: Sign, x: u8, y: u8, trailing_zeros: bool) -> u8 {
@@ -122,30 +116,6 @@ impl stdlib::default::Default for Context {
         }
     }
 }
-
-impl Context {
-    /// Add two big digit references
-    pub fn add_refs<'a, 'b, A, B>(&self, a: A, b: B) -> BigDecimal
-    where
-        A: Into<BigDecimalRef<'a>>,
-        B: Into<BigDecimalRef<'b>>,
-    {
-        let mut sum = BigDecimal::zero();
-        self.add_refs_into(a, b, &mut sum);
-        sum
-    }
-
-    /// Add two decimal refs, storing value in dest
-    pub fn add_refs_into<'a, 'b, A, B>(&self, a: A, b: B, dest: &mut BigDecimal)
-    where
-        A: Into<BigDecimalRef<'a>>,
-        B: Into<BigDecimalRef<'b>>,
-    {
-        let sum = a.into() + b.into();
-        *dest = sum.with_precision_round(self.precision, self.rounding)
-    }
-}
-
 
 #[cfg(test)]
 mod test_context {
