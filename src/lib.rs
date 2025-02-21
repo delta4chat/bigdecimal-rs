@@ -786,7 +786,7 @@ impl BigDecimal {
 
     /// Take the square root of the number, using context for precision and rounding
     #[inline(always)]
-    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    #[deprecated(since="0.4.8", note="use `BigDecimal::set_context` or `BigDecimal::with_context` before calling `BigDecimal::sqrt`")]
     pub fn sqrt_with_context(&self, ctx: &Context) -> Option<BigDecimal> {
         if (&self.ctx) == ctx {
             self.sqrt()
@@ -837,7 +837,7 @@ impl BigDecimal {
 
     /// Take cube root of self, using properties of provided context
     #[inline(always)]
-    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    #[deprecated(since="0.4.8", note="use `BigDecimal::set_context` or `BigDecimal::with_context` before calling `BigDecimal::cbrt`")]
     pub fn cbrt_with_context(&self, ctx: &Context) -> BigDecimal {
         if (&self.ctx) == ctx {
             self.cbrt()
@@ -848,7 +848,7 @@ impl BigDecimal {
 
     /// Compute the reciprical of the number: x<sup>-1</sup>
     #[inline(always)]
-    #[deprecated(since="0.4.8", note="use BigDecimal::set_context before calling this")]
+    #[deprecated(since="0.4.8", note="use `BigDecimal::set_context` or `BigDecimal::with_context` before calling `BigDecimal::inverse`")]
     pub fn inverse_with_context(&self, ctx: &Context) -> BigDecimal {
         if (&self.ctx) == ctx {
             self.inverse()
@@ -954,7 +954,7 @@ impl BigDecimal {
     }
 
     /// Returns the logarithm of `self` with the specified base.
-    /// (rounding and precision-limits by provided context)
+    /// (rounding and precision-limits by self.ctx)
     ///
     /// Mathematically, this computes log<sub>base</sub>(self), which is equivalent to ln(self) / ln(base).
     ///

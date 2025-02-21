@@ -67,6 +67,10 @@ impl Div<&BigDecimal> for &BigDecimal {
             return self.clone();
         }
 
+        if other == &BigDecimal::from(2u8) {
+            return self.half();
+        }
+
         let scale = self.scale - other.scale;
 
         let num_int = &self.int_val;
