@@ -44,7 +44,7 @@ serde_test = "<1.0.176"
 siphasher = { version = "0.3.10", default-features = false }
 # The following dev-dependencies are only required for benchmarking
 #   (use the `benchmark-bigdecimal` script to uncomment these and run benchmarks)
-criterion = { version = "0.4", features = [ "html_reports" ] }
+criterion = { version = "0.5", features = [ "html_reports" ] }
 oorandom = { version = "11.1.3" }
 lazy_static = { version = "1" }
 
